@@ -1,19 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Language, UserProgress } from './types';
+import { Language, UserProgress, VocabularyItem } from './types';
 import { languages } from './data/languages';
 import LanguageSelector from './components/LanguageSelector';
 import Lesson from './components/Lesson';
 import Flashcards from './components/Flashcards';
 import Quiz from './components/Quiz';
 import Progress from './components/Progress';
+import { ConversationalPractice } from './components/ConversationalPractice';
+import { ProfileSetup } from './components/ProfileSetup';
+import { loadProfile } from './engine/LearnerProfile';
 import './App.css';
 
-type View = 'selector' | 'lesson' | 'flashcards' | 'quiz' | 'progress';
+type View = 'selector' | 'lesson' | 'flashcards' | 'quiz' | 'progress' | 'practice' | 'profile';
 
 function App() {
   const [selectedLanguage, setSelectedLanguage] = useState<Language | null>(null);
   const [currentView, setCurrentView] = useState<View>('selector');
   const [userProgress, setUserProgress] = useState<Record<string, UserProgress>>({});
+  const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
 
   useEffect(() => {
     const savedProgress = localStorage.getItem('languageAppProgress');
@@ -28,12 +32,25 @@ function App() {
 
   const handleLanguageSelect = (language: Language) => {
     setSelectedLanguage(language);
-    setCurrentView('lesson');
+
+    const profile = loadProfile(language.code);
+    if (!profile || profile.interests.domains.length === 0) {
+      setNeedsProfileSetup(true);
+      setCurrentView('profile');
+    } else {
+      setCurrentView('practice');
+    }
   };
 
   const handleBackToSelector = () => {
     setSelectedLanguage(null);
     setCurrentView('selector');
+    setNeedsProfileSetup(false);
+  };
+
+  const handleProfileComplete = () => {
+    setNeedsProfileSetup(false);
+    setCurrentView('practice');
   };
 
   const updateProgress = (language: string, update: Partial<UserProgress>) => {
@@ -48,17 +65,52 @@ function App() {
     }));
   };
 
+  const getAllVocabulary = (language: Language): VocabularyItem[] => {
+    return language.lessons.flatMap(lesson => lesson.vocabulary);
+  };
+
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🌍 Language Learning App</h1>
-        {selectedLanguage && (
+        <h1>Language Learning</h1>
+        {selectedLanguage && currentView !== 'profile' && (
           <nav className="nav-bar">
-            <button onClick={handleBackToSelector}>← Languages</button>
-            <button onClick={() => setCurrentView('lesson')}>📚 Lessons</button>
-            <button onClick={() => setCurrentView('flashcards')}>🎴 Flashcards</button>
-            <button onClick={() => setCurrentView('quiz')}>✅ Quiz</button>
-            <button onClick={() => setCurrentView('progress')}>📊 Progress</button>
+            <button onClick={handleBackToSelector}>Languages</button>
+            <button
+              onClick={() => setCurrentView('practice')}
+              className={currentView === 'practice' ? 'active' : ''}
+            >
+              Practice
+            </button>
+            <button
+              onClick={() => setCurrentView('lesson')}
+              className={currentView === 'lesson' ? 'active' : ''}
+            >
+              Lessons
+            </button>
+            <button
+              onClick={() => setCurrentView('flashcards')}
+              className={currentView === 'flashcards' ? 'active' : ''}
+            >
+              Flashcards
+            </button>
+            <button
+              onClick={() => setCurrentView('quiz')}
+              className={currentView === 'quiz' ? 'active' : ''}
+            >
+              Quiz
+            </button>
+            <button
+              onClick={() => setCurrentView('progress')}
+              className={currentView === 'progress' ? 'active' : ''}
+            >
+              Progress
+            </button>
+            <button
+              onClick={() => setCurrentView('profile')}
+            >
+              Profile
+            </button>
           </nav>
         )}
       </header>
@@ -69,6 +121,24 @@ function App() {
             languages={languages}
             onSelect={handleLanguageSelect}
             userProgress={userProgress}
+          />
+        )}
+
+        {currentView === 'profile' && selectedLanguage && (
+          <ProfileSetup
+            languageCode={selectedLanguage.code}
+            languageName={selectedLanguage.name}
+            onComplete={handleProfileComplete}
+            onBack={needsProfileSetup ? handleBackToSelector : () => setCurrentView('practice')}
+          />
+        )}
+
+        {currentView === 'practice' && selectedLanguage && (
+          <ConversationalPractice
+            languageCode={selectedLanguage.code}
+            languageName={selectedLanguage.name}
+            vocabulary={getAllVocabulary(selectedLanguage)}
+            onBack={handleBackToSelector}
           />
         )}
 
@@ -137,7 +207,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Learn Central American Spanish, Korean, Chinese, and Japanese!</p>
+        <p>Central American Spanish, Korean, Chinese, and Japanese</p>
       </footer>
     </div>
   );
